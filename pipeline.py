@@ -33,32 +33,56 @@ def save_to_spreadsheet(noticias, filename):
         for noticia in noticias:
             writer.writerow(noticia)
 
-def send_whatsapp_summary(noticias):
+def analyze_spreadsheet_and_send_whatsapp(filename):
+    if not os.path.isfile(filename):
+        print(f"El archivo {filename} no existe para analizar.")
+        return
+
+    # 1. Leer el archivo CSV generado ("archivo de data")
+    noticias_leidas = []
+    with open(filename, mode='r', encoding='utf-8') as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            noticias_leidas.append(row)
+
+    if not noticias_leidas:
+        print("El archivo CSV está vacío.")
+        return
+
+    # 2. Configurar credenciales
     account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
     auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
     from_whatsapp_number = os.environ.get('TWILIO_WHATSAPP_FROM')
     to_whatsapp_number = os.environ.get('TWILIO_WHATSAPP_TO')
 
-    if not all([account_sid, auth_token, from_whatsapp_number, to_whatsapp_number]):
-        print("Faltan credenciales de Twilio. Saltando el envío por WhatsApp.")
-        return
-
-    client = Client(account_sid, auth_token)
-
+    # 3. Realizar un análisis/resumen basado en los datos extraídos del CSV
     today_str = datetime.now().strftime("%Y-%m-%d")
-    summary = f"Resumen de Noticias - {today_str}\n\n"
+    total_noticias = len(noticias_leidas)
 
-    for i, noticia in enumerate(noticias, 1):
-        summary += f"{i}. {noticia['title']}\n"
+    summary = f"📊 Análisis del archivo de datos ({today_str})\n"
+    summary += f"Total de noticias procesadas: {total_noticias}\n\n"
+    summary += "📰 Últimos titulares:\n"
 
-    summary += "\nRevisa tu spreadsheet local para más detalles."
+    # Mostramos los últimos 5 del archivo para el resumen del análisis
+    for i, noticia in enumerate(noticias_leidas[-5:], 1):
+        summary += f"• {noticia['title']}\n"
 
-    message = client.messages.create(
-        body=summary,
-        from_=from_whatsapp_number,
-        to=to_whatsapp_number
-    )
-    print(f"Mensaje de WhatsApp enviado con SID: {message.sid}")
+    summary += f"\n📁 Datos leídos de: {filename}"
+
+    # 4. Enviar por WhatsApp
+    if not all([account_sid, auth_token, from_whatsapp_number, to_whatsapp_number]):
+        print("Faltan credenciales de Twilio. Se muestra el análisis por consola pero no se envía por WhatsApp.")
+        print("\n--- RESUMEN A ENVIAR (Simulado) ---")
+        print(summary)
+        print("-----------------------------------\n")
+    else:
+        client = Client(account_sid, auth_token)
+        message = client.messages.create(
+            body=summary,
+            from_=from_whatsapp_number,
+            to=to_whatsapp_number
+        )
+        print(f"Mensaje de WhatsApp enviado con SID: {message.sid}")
 
 def main():
     print("Obteniendo noticias...")
@@ -75,8 +99,8 @@ def main():
     print(f"Guardando en el spreadsheet: {spreadsheet_filename}...")
     save_to_spreadsheet(noticias, spreadsheet_filename)
 
-    print("Enviando resumen por WhatsApp...")
-    send_whatsapp_summary(noticias)
+    print("Leyendo el archivo de data generado y creando el resumen para WhatsApp...")
+    analyze_spreadsheet_and_send_whatsapp(spreadsheet_filename)
     print("Pipeline de datos ejecutado con éxito.")
 
 if __name__ == "__main__":
